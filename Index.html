@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>MyFolders — Gestion Privée</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        :root{--bg:#050507;--bg2:#0a0a0f;--card:#12121a;--border:#20202e;--accent:#7fff6e;--accent-dark:#5ecf52;--red:#ff4d6d;--text:#f0f0f8;--muted:#5a5a78}
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden}
+        
+        nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(10,10,15,0.95);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:center;padding:10px 0 18px}
+        .nav-btn{display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;font-weight:600;text-transform:uppercase;transition:all .2s}
+        .nav-btn.active{color:var(--accent)}
+        .nav-btn svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2}
+
+        .page{display:none;padding:0 0 100px;min-height:100vh}
+        .page.active{display:block}
+        
+        .header{padding:50px 20px 25px;background:linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);border-bottom:1px solid var(--border)}
+        .header h1{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:1px;color:var(--accent)}
+        
+        .section{padding:20px 16px;display:flex;flex-direction:column;gap:15px}
+        .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px}
+        
+        .input-group{display:flex;flex-direction:column;gap:8px;margin-bottom:15px}
+        .input-group label{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:1px}
+        .input-group input, .input-group select, .input-group textarea{
+            background:var(--bg);border:1px solid var(--border);border-radius:12px;color:#fff;
+            padding:14px;font-family:'DM Sans',sans-serif;font-size:16px;outline:none;width:100%
+        }
+
+        .btn{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;padding:15px;border-radius:14px;border:none;cursor:pointer;width:100%;transition:0.2s}
+        .btn-primary{background:var(--accent);color:#000}
+        .btn-link{background:none;color:var(--muted);font-size:12px;text-decoration:underline;margin-top:20px}
+
+        .folder-item{display:flex;justify-content:space-between;align-items:center;background:var(--bg2);padding:15px;border-radius:14px;border:1px solid var(--border);margin-bottom:10px}
+        .folder-info h3{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text)}
+        .folder-content{font-family:monospace;color:var(--accent);margin-top:8px;display:none;background:rgba(0,0,0,0.2);padding:10px;border-radius:8px}
+        .visible{display:block !important}
+
+        #auth-screen{position:fixed;inset:0;background:var(--bg);z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px}
+        .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:var(--accent);color:#000;padding:12px 25px;border-radius:50px;font-weight:700;z-index:3000;transition:0.4s}
+        .toast.show{transform:translateX(-50%) translateY(0)}
+        .hidden{display:none !important}
+    </style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<div id="auth-screen">
+    <h1 id="auth-title" style="font-family:'Bebas Neue';font-size:50px;color:var(--accent);text-align:center">MY FOLDERS</h1>
+    <p id="auth-welcome" style="color:var(--muted);margin-bottom:30px;text-align:center">Sécurisez vos données personnelles</p>
+    
+    <div id="auth-form" style="width:100%;max-width:320px">
+        <div id="group-signup" class="input-group">
+            <label>Votre Prénom</label>
+            <input type="text" id="user-name" placeholder="Ex: Raphaël">
+        </div>
+        
+        <div class="input-group">
+            <label id="label-pass">Votre Code d'accès</label>
+            <input type="password" id="user-pass" placeholder="••••••" style="text-align:center;font-size:24px;letter-spacing:5px">
+        </div>
+
+        <button class="btn btn-primary" id="btn-auth" onclick="handleAuth()">CONTINUER</button>
+        
+        <button class="btn btn-link" id="btn-switch" onclick="resetAccount()">Changer de compte / Se déconnecter</button>
+    </div>
+</div>
+
+<div class="page" id="page-list">
+    <div class="header"><h1 id="user-display">Mes Dossiers</h1><p>Contenu protégé par chiffrement</p></div>
+    <div class="section">
+        <select id="filter-cat" onchange="renderFolders()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px;width:100%">
+            <option value="all">Tous les dossiers</option>
+            <option value="Personnel">Personnel</option>
+            <option value="Travail">Travail</option>
+            <option value="Jeux">Jeux</option>
+            <option value="Corbeille">Corbeille</option>
+        </select>
+        <div id="folders-container"></div>
+    </div>
+</div>
+
+<div class="page" id="page-add">
+    <div class="header"><h1>Nouveau Dossier</h1><p>Enregistrer une nouvelle donnée</p></div>
+    <div class="section">
+        <div class="card">
+            <div class="input-group"><label>Titre du dossier</label><input type="text" id="add-title"></div>
+            <div class="input-group"><label>Catégorie</label>
+                <select id="add-cat"><option>Personnel</option><option>Travail</option><option>Jeux</option></select>
+            </div>
+            <div class="input-group"><label>Notes / Code</label><textarea id="add-content" rows="4"></textarea></div>
+            <button class="btn btn-primary" onclick="saveFolder()">ENREGISTRER</button>
+        </div>
+    </div>
+</div>
+
+<nav id="main-nav" class="hidden">
+    <button class="nav-btn active" onclick="showPage('list', this)">
+        <svg viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        Dossiers
+    </button>
+    <button class="nav-btn" onclick="showPage('add', this)">
+        <svg viewBox="0 0 24 24"><path d="M12 4v16m-8-8h16"/></svg>
+        Ajouter
+    </button>
+</nav>
+
+<script>
+    let activeUser = JSON.parse(localStorage.getItem('user_profile'));
+    let masterKey = "";
+    let data = JSON.parse(localStorage.getItem('folders_data') || "[]");
+
+    // Initialisation
+    window.onload = () => {
+        if(activeUser) {
+            document.getElementById('group-signup').classList.add('hidden');
+            document.getElementById('auth-title').textContent = "BONJOUR " + activeUser.name.toUpperCase();
+            document.getElementById('auth-welcome').textContent = "Entrez votre code pour accéder à vos dossiers";
+            document.getElementById('btn-auth').textContent = "SE CONNECTER";
+        } else {
+            document.getElementById('btn-switch').classList.add('hidden');
+        }
+    };
+
+    function handleAuth() {
+        const passInput = document.getElementById('user-pass').value;
+        
+        if(!activeUser) {
+            // INSCRIPTION
+            const nameInput = document.getElementById('user-name').value;
+            if(!nameInput || !passInput) return showToast("Remplissez votre profil !");
+            
+            activeUser = { name: nameInput, pass: passInput };
+            localStorage.setItem('user_profile', JSON.stringify(activeUser));
+            showToast("Compte créé avec succès !");
+            location.reload();
+        } else {
+            // CONNEXION
+            if(passInput === activeUser.pass) {
+                masterKey = passInput;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('main-nav').classList.remove('hidden');
+                document.getElementById('user-display').textContent = "Dossiers de " + activeUser.name;
+                showPage('list');
+            } else {
+                showToast("Code incorrect");
+            }
+        }
+    }
+
+    function resetAccount() {
+        if(confirm("Voulez-vous vraiment changer de compte ? (Cela n'efface pas vos données)")) {
+            localStorage.removeItem('user_profile');
+            location.reload();
+        }
+    }
+
+    function showPage(id, btn) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-' + id).classList.add('active');
+        if(btn) {
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+        if(id === 'list') renderFolders();
+    }
+
+    function saveFolder() {
+        const title = document.getElementById('add-title').value;
+        const cat = document.getElementById('add-cat').value;
+        const content = document.getElementById('add-content').value;
+
+        if(!title || !content) return showToast("Informations manquantes");
+
+        const encrypted = CryptoJS.AES.encrypt(content, masterKey).toString();
+        data.push({ id: Date.now(), title, cat, content: encrypted, etat: 'actif' });
+        localStorage.setItem('folders_data', JSON.stringify(data));
+        
+        showToast("Dossier enregistré");
+        document.getElementById('add-title').value = "";
+        document.getElementById('add-content').value = "";
+        showPage('list');
+    }
+
+    function renderFolders() {
+        const container = document.getElementById('folders-container');
+        const filter = document.getElementById('filter-cat').value;
+        container.innerHTML = "";
+
+        const filtered = data.filter(d => {
+            if (filter === 'Corbeille') return d.etat === 'poubelle';
+            if (filter === 'all') return d.etat === 'actif';
+            return d.etat === 'actif' && d.cat === filter;
+        });
+
+        filtered.forEach(d => {
+            const item = document.createElement('div');
+            item.className = "folder-item";
+            item.innerHTML = `
+                <div class="folder-info">
+                    <h3>${d.title}</h3>
+                    <div id="txt-${d.id}" class="folder-content"></div>
+                </div>
+                <div style="display:flex; gap:15px">
+                    <button onclick="viewContent(${d.id}, '${d.content}')" style="background:none; border:none; font-size:20px">👁️</button>
+                    <button onclick="moveStatus(${d.id})" style="background:none; border:none; font-size:20px">${d.etat === 'actif' ? '🗑️' : '🔄'}</button>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function viewContent(id, encrypted) {
+        const el = document.getElementById('txt-' + id);
+        if(el.classList.contains('visible')) {
+            el.classList.remove('visible');
+        } else {
+            const decrypted = CryptoJS.AES.decrypt(encrypted, masterKey).toString(CryptoJS.enc.Utf8);
+            el.textContent = decrypted;
+            el.classList.add('visible');
+        }
+    }
+
+    function moveStatus(id) {
+        const idx = data.findIndex(d => d.id === id);
+        data[idx].etat = data[idx].etat === 'actif' ? 'poubelle' : 'actif';
+        localStorage.setItem('folders_data', JSON.stringify(data));
+        renderFolders();
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2000);
+    }
+</script>
+</body>
+</html>
